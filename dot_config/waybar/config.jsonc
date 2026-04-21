@@ -16,7 +16,8 @@
     "custom/voxtype",
     "custom/screenrecording-indicator",
     "custom/idle-indicator",
-    "custom/notification-silencing-indicator"
+    "custom/notification-silencing-indicator",
+    "custom/weather"
   ],
   "modules-right": [
     "group/tray-expander",
@@ -64,6 +65,13 @@
     "tooltip-format": "Omarchy update available",
     "signal": 7,
     "interval": 21600
+  },
+  "custom/weather": {
+    "exec": "/usr/bin/waybar-weather",
+    "restart-interval": 60,
+    "return-type": "json",
+    "hide-empty-text": true,
+    "on-click": "pkill -USR1 waybar-weather"
   },
   "cpu": {
     "interval": 5,

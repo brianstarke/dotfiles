@@ -1,0 +1,8 @@
+units = "imperial"
+
+[weather]
+  cold_threshold = 35
+  hot_threshold = 85
+
+[templates]
+  use_css_icon = true
