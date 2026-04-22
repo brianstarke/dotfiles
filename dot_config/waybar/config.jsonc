@@ -7,7 +7,7 @@
   "modules-left": [
     "custom/omarchy",
     "hyprland/workspaces",
-    "custom/cava",
+    "cava",
     "custom/playerinfo"
   ],
   "modules-center": [
@@ -239,5 +239,26 @@
     "on-click-middle": "playerctl play-pause",
     "on-click-right": "playerctl next",
     "on-click-left": "playerctl previous"
+  },
+  "cava": {
+    "hide_on_silence": true,
+    "bars": 12,
+    "input_delay": 2,
+    "autosens": 0,
+    "sensitivity": 0.1,
+    "format-icons": [
+      "⠀",
+      "⡀",
+      "⣀",
+      "⣄",
+      "⣤",
+      "⣦",
+      "⣶",
+      "⣷",
+      "⣿"
+    ],
+    "actions": {
+      "on-click-right": "mode"
+    }
   }
 }
