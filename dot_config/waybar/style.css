@@ -36,7 +36,6 @@
 #pulseaudio,
 #custom-omarchy,
 #custom-weather,
-#cava,
 #custom-playerinfo,
 #custom-update {
   min-width: 12px;
@@ -101,6 +100,16 @@ tooltip {
 
 #custom-voxtype.recording {
   color: #a55555;
+}
+
+#custom-playerinfo {
+  color: #ff8349;
+  animation: player-fade 3s ease-in-out infinite alternate;
+}
+
+@keyframes player-fade {
+  from { opacity: 1; }
+  to   { opacity: 0.3; }
 }
 
 .waybar-weather {
