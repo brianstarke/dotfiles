@@ -7,6 +7,7 @@
   "modules-left": [
     "custom/omarchy",
     "hyprland/workspaces",
+    "custom/docker",
     "custom/playerinfo"
   ],
   "modules-center": [
@@ -19,7 +20,8 @@
     "custom/weather"
   ],
   "modules-right": [
-    "group/tray-expander",
+    "tray",
+    // "group/tray-expander",
     "bluetooth",
     "network",
     "pulseaudio",
@@ -224,10 +226,6 @@
     "icon-size": 12,
     "spacing": 17
   },
-  "custom/cava": {
-    "exec": "~/.config/waybar/scripts/cava.sh",
-    "format": "{}"
-  },
   "custom/playerinfo": {
     "format": "{}",
     "exec": "~/.config/waybar/scripts/playerinfo.sh",
@@ -238,5 +236,11 @@
     "on-click-middle": "playerctl play-pause",
     "on-click-right": "playerctl next",
     "on-click-left": "playerctl previous"
+  },
+  "custom/docker": {
+    "on-click": "omarchy-launch-or-focus-tui lazydocker",
+    "exec": "~/.cargo/bin/waybar-docker",
+    "return-type": "json",
+    "interval": 5
   }
 }
