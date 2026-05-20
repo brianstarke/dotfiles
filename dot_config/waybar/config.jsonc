@@ -20,8 +20,8 @@
     "custom/weather"
   ],
   "modules-right": [
+    "custom/hyprcaffeine",
     "tray",
-    // "group/tray-expander",
     "bluetooth",
     "network",
     "pulseaudio",
@@ -68,11 +68,11 @@
     "interval": 21600
   },
   "custom/weather": {
-    "exec": "/usr/bin/waybar-weather",
-    "restart-interval": 60,
+    "exec": "$OMARCHY_PATH/default/waybar/weather.sh",
     "return-type": "json",
-    "hide-empty-text": true,
-    "on-click": "pkill -USR1 waybar-weather"
+    "interval": 60,
+    "tooltip": false,
+    "on-click": "notify-send -u low \"$(omarchy-weather-status)\""
   },
   "cpu": {
     "interval": 5,
@@ -242,5 +242,12 @@
     "exec": "~/.cargo/bin/waybar-docker",
     "return-type": "json",
     "interval": 5
+  },
+  "custom/hyprcaffeine": {
+    "exec": "hyprcaffeine waybar",
+    "on-click": "hyprcaffeine menu",
+    "on-click-right": "hyprcaffeine toggle",
+    "interval": 2,
+    "return-type": "json"
   }
 }
