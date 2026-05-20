@@ -20,7 +20,6 @@
     "custom/weather"
   ],
   "modules-right": [
-    "custom/hyprcaffeine",
     "tray",
     "bluetooth",
     "network",
@@ -242,12 +241,5 @@
     "exec": "~/.cargo/bin/waybar-docker",
     "return-type": "json",
     "interval": 5
-  },
-  "custom/hyprcaffeine": {
-    "exec": "hyprcaffeine waybar",
-    "on-click": "hyprcaffeine menu",
-    "on-click-right": "hyprcaffeine toggle",
-    "interval": 2,
-    "return-type": "json"
   }
 }
