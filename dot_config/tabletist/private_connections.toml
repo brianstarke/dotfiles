@@ -1,0 +1,76 @@
+# Tabletist's saved connections. No password is kept here: those are in the
+# system's keyring.
+#
+# Edit it while Tabletist is closed. A connection without an `id` line gets
+# one at the next start. Tabletist writes the whole file again when a
+# connection changes, and keeps no comment but these.
+version = 3
+
+[[connections]]
+id          = "916e95e0-64ed-4132-9cf7-6b4b70a3907c"
+name        = "fortuna dev"
+environment = "dev"
+password    = "keyring"
+driver      = "postgres"
+host        = "10.237.0.3"
+port        = 5432
+user        = "fortuna-api-gijhp"
+database    = "fortuna"
+tls         = "prefer"
+
+[[connections]]
+id          = "2ea5e3cc-e135-44d0-b181-e1031379bc76"
+name        = "fortuna local"
+environment = "local"
+password    = "keyring"
+driver      = "postgres"
+host        = "localhost"
+port        = 5434
+user        = "fortuna_dev"
+database    = "fortuna_dev"
+tls         = "prefer"
+
+[[connections]]
+id          = "1024039f-1f96-419d-a651-45d24b344798"
+name        = "fortuna stg"
+environment = "staging"
+password    = "keyring"
+driver      = "postgres"
+host        = "10.221.0.3"
+port        = 5432
+user        = "brian"
+database    = "fortuna"
+tls         = "prefer"
+
+[[connections]]
+id          = "3803442c-a462-44a9-8cb4-d1c23857c784"
+name        = "fortuna prod"
+environment = "production"
+password    = "keyring"
+driver      = "postgres"
+host        = "localhost"
+port        = 15433
+user        = "fortuna-api-vpqcb"
+database    = "fortuna"
+tls         = "require"
+
+[[connections]]
+id          = "d123dab4-353c-4797-9e3c-9cbc25949976"
+name        = "bigquery dev"
+environment = "dev"
+driver      = "bigquery"
+database    = "development-480713"
+
+[[connections]]
+id          = "670b3173-b605-4ffe-845f-8756228c82a2"
+name        = "bigquery stg"
+environment = "staging"
+driver      = "bigquery"
+database    = "staging-480713"
+
+[[connections]]
+id          = "e6a8c0ee-f23d-4125-aabc-ad9710feb266"
+name        = "bigquery prod"
+environment = "production"
+driver      = "bigquery"
+database    = "production-480713"
