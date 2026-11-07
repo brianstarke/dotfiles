@@ -447,10 +447,13 @@ export default class Spaces extends View {
             .child(h_flex()
               .gap(9)
               .items_center()
-              .child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child([...w.name][0]?.toUpperCase() ?? "?"))
+              // Layered mark: the space's colour as an offset shadow, the initial in a ring of it
+              .child(div().size(20).relative().flex_none()
+                .child(div().absolute().left(3).top(3).size(15).rounded(4).bg(fill).opacity(0.3))
+                .child(div().absolute().left(0).top(0).size(15).rounded(4).border_1().border_color(fill).bg(t.chrome).flex().items_center().justify_center().text_size(9.5).font_bold().text_color(fill).child([...w.name][0]?.toUpperCase() ?? "?")))
               .child(div().flex_shrink(0).max_w(150).truncate().text_color(t.foreground).child(w.name))
               .child(g ? this.gitMarks(g, t) : div().flex_1()))
-            .when(Boolean(where), el => el.child(div().pl(27).truncate().text_size(11.5).text_color(t.dim).child(where))),
+            .when(Boolean(where), el => el.child(div().pl(29).truncate().text_size(11.5).text_color(t.dim).child(where))),
       );
   }
 
