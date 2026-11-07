@@ -1,0 +1,278 @@
+// LCARS: the frame of the lcars layout. One mod draws every part; the layout says which with props().part:
+// "top" (the upper elbow, arm and title), "side" (spaces and crew as LCARS buttons), "tabs" (the tab pills)
+// and "bottom" (the lower elbow and the status arm). As a popup it is "machines" (where a new space goes).
+// Right-clicks open Herdr's own menu mod, so rename, close, split and worktrees work as in its other layouts.
+import { View, div, svg } from "gpui-kit";
+import { v_flex, h_flex } from "gpui-base";
+import { spaces, agents, machines, run, props, setAgentOrder, window, openOverlay, closeOverlay, exec, home } from "herdr";
+import * as fs from "fs/promises";
+
+const C = {
+  black: "#000000", orange: "#ff9900", peach: "#ff9966", gold: "#ffcc66", tan: "#ffcc99", lilac: "#cc99cc",
+  violet: "#9999ff", blue: "#99ccff", sky: "#5599ff", red: "#ff5544", gray: "#666688",
+};
+const SPACE_COLORS = [C.tan, C.lilac, C.peach, C.blue, C.violet];
+const STATUS = { working: C.blue, blocked: C.red, done: C.gold, idle: C.violet };
+const WORD = { working: "WORKING", blocked: "NEEDS YOU", done: "DONE", idle: "STANDING BY" };
+const SIDE = 210; // the sidebar's width, which the elbows match
+const ARM = 20; // the thickness of the horizontal arms
+const GAP = 4; // black between LCARS blocks
+
+const up = (s) => String(s ?? "").toUpperCase();
+const two = (n) => String(n).padStart(2, "0");
+
+function stardate(now) {
+  // a made-up but steady stardate: year, then the day's fraction of the year
+  const d = new Date(now);
+  const start = Date.UTC(d.getUTCFullYear(), 0, 1);
+  return `${d.getUTCFullYear() - 1920}${(((now - start) / 864e5) * 2.7397).toFixed(1).padStart(6, "0")}`;
+}
+
+// a block of LCARS colour with a black label set in its bottom-right corner
+function slab(id, color, label, h, extra) {
+  let el = div().id(id).w_full().h(h).flex_none().bg(color).flex().items_end().justify_end().px(10).pb(2)
+    .text_color(C.black).text_size(15).font_weight(700).child(up(label));
+  return extra ? extra(el) : el;
+}
+
+// Shepherdr (its web app runs on this computer; its port is in ~/.shepherdr/server.json): what waits on the human, read from
+// GET /api/snapshot every POLL ms. null is "not running", never an error; nothing is drawn before the first answer.
+const POLL = 12000;
+const SHEP_ROWS = 3; // how many tasks the sidebar lists
+async function shepherdr() {
+  let port = 7787;
+  try { port = JSON.parse(await fs.readFile(`${home()}/.shepherdr/server.json`, "utf8")).port || port; } catch {}
+  const url = `http://127.0.0.1:${port}`;
+  const res = await fetch(`${url}/api/snapshot`);
+  if (!res.ok) return null;
+  const snap = await res.json();
+  const places = new Map((snap.places ?? []).map((p) => [p.id, p]));
+  const tasks = (snap.tasks ?? []).filter((t) => places.has(t.place) && !t.archived);
+  const asks = Object.keys(snap.asks ?? {}).filter((id) => places.has(id) && snap.asks[id]);
+  const count = (...st) => tasks.filter((t) => st.includes(t.status)).length;
+  // the rows that wait on the human, the coordinators' questions first, then tasks that need an answer, then ready to merge
+  const rows = [
+    ...asks.map((id) => ({ key: `ask-${id}`, label: `${places.get(id).home ? "home" : places.get(id).name} · ${places.get(id).machine}`, word: "ASKS YOU", color: C.red })),
+    ...tasks.filter((t) => t.status === "need").map((t) => ({ key: t.id, label: `${t.id} · ${t.name}`, word: t.sub || "NEEDS YOU", color: C.red })),
+    ...tasks.filter((t) => t.status === "ready").map((t) => ({ key: t.id, label: `${t.id} · ${t.name}`, word: "READY TO MERGE", color: C.gold })),
+  ];
+  // merging counts as working: Shepherdr is busy with it
+  return { url, need: asks.length + count("need"), ready: count("ready"), working: count("work", "merging"), rows };
+}
+const openUrl = (url) => exec(window()?.platform === "macos" ? "open" : "xdg-open", [url]).catch(() => {});
+
+// Herdr's menu mod at the pointer: tab is "space", "tab", "pane" or "global"
+const menu = (tab, target) => openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab, target } });
+// Herdr's new menu: a terminal, each installed agent, a new space, worktrees
+const newMenu = () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 });
+// a right-click handler that opens one menu; stopping the press keeps the bar behind from opening its own
+const onRight = (open) => (_e, cx) => { cx.stop_propagation(); open(); };
+const globalMenu = () => menu("global", {});
+// where a new space goes, when there is more than this computer
+function newSpace() {
+  const away = machines().filter((m) => m.name);
+  if (!away.length) return run("space.new", {});
+  openOverlay({ mod: "lcars", kind: "popup", width: 230, height: 60 + 44 * (away.length + 1),
+    frame: "none", props: { part: "machines" } });
+}
+
+export default class Lcars extends View {
+  init(_props, cx) {
+    this.now = Date.now();
+    cx.timer.every(15000, (cx) => { this.now = Date.now(); cx.notify(); });
+    // the sidebar and the status arm show Shepherdr; each polls on its own and redraws only when the answer changed
+    this.shep = undefined; // undefined: not asked yet, null: not running
+    const part = _props?.part ?? props()?.part;
+    if (part === "side" || part === "bottom") {
+      this.poll(cx);
+      cx.timer.every(POLL, (cx) => this.poll(cx));
+    }
+  }
+
+  poll(cx) {
+    if (this.polling && Date.now() - this.polling < 60000) return; // an earlier ask is still out
+    this.polling = Date.now();
+    cx.spawn(async (cx) => {
+      let next = null;
+      try { next = await shepherdr(); } catch {}
+      this.polling = 0;
+      if (JSON.stringify(next) !== JSON.stringify(this.shep)) { this.shep = next; cx.notify(); }
+    });
+  }
+
+  render() {
+    const part = props()?.part;
+    if (part === "top") return this.top();
+    if (part === "side") return this.side();
+    if (part === "tabs") return this.tabs();
+    if (part === "bottom") return this.bottom();
+    if (part === "machines") return this.machines();
+    return div().child(`lcars: unknown part ${part}`);
+  }
+
+  machines() {
+    const close = () => closeOverlay(props()?.overlay);
+    const all = [{ name: null, layout: "ready" }, ...machines().filter((m) => m.name)];
+    const row = (m, i) => {
+      const ready = m.layout === "ready";
+      return slab(`new-space-${m.name ?? "local"}`, ready ? SPACE_COLORS[i % SPACE_COLORS.length] : C.gray,
+        `${m.name ?? "this computer"}${ready ? "" : " · " + m.layout}`, 40, (el) => el
+          .when(ready, (el) => el.cursor_pointer().hover((st) => st.opacity(0.85))
+            .on_click(() => { close(); run("space.new", m.name ? { machine: m.name } : {}); })));
+    };
+    return v_flex().size_full().bg(C.black).rounded(14).p(6).gap(GAP)
+      .child(slab("new-space-title", C.orange, "new space on", 30, (el) => el.rounded_tl(12).rounded_tr(12)))
+      .children(all.map(row));
+  }
+
+  top() {
+    const space = spaces().find((s) => s.active);
+    const elbow = div().w(SIDE).h_full().flex_none().bg(C.orange).rounded_tl(44)
+      .flex().items_end().justify_end().px(10).pb(4).text_color(C.black).text_size(13).font_weight(700)
+      .child(up(space?.machine ?? "this computer"));
+    const arm = h_flex().w_full().h(ARM).flex_none().gap(GAP)
+      .child(div().w(160).h_full().bg(C.orange))
+      .child(div().w(70).h_full().bg(C.lilac))
+      .child(div().flex_1().h_full().bg(C.tan))
+      .child(div().w(46).h_full().bg(C.blue).rounded_tr(10).rounded_br(10));
+    // the concave inner corner: black with a rounded top-left corner, over the elbow's orange
+    const title = div().w_full().flex_1().bg(C.orange).child(
+      h_flex().size_full().bg(C.black).rounded_tl(26).items_center().justify_end().gap(14).pr(4)
+        .child(div().text_color(C.gold).text_size(13).font_weight(700).child(`STARDATE ${stardate(this.now)}`))
+        .child(div().text_color(C.orange).text_size(30).font_weight(700).child(up(space?.name ?? "HERDR"))));
+    return h_flex().id("top").size_full().bg(C.black).on_mouse_down("right", onRight(globalMenu))
+      .child(elbow)
+      .child(v_flex().flex_1().h_full().child(arm).child(title));
+  }
+
+  side() {
+    const list = spaces();
+    const crew = agents();
+    setAgentOrder(crew.map((a) => a.address));
+    const space = (s, i) => {
+      const color = s.active ? C.orange : s.status === "blocked" ? C.red : SPACE_COLORS[i % SPACE_COLORS.length];
+      return h_flex().id(`space-${s.id}`).w_full().h(40).flex_none().bg(color).items_end().justify_between().px(10).pb(2)
+        .text_color(C.black).font_weight(700).cursor_pointer()
+        .hover((st) => st.opacity(0.85))
+        .when(s.status === "blocked" && !s.active, (el) => el.loop("opacity", { from: 0.55, to: 1, period: 900 }))
+        .on_click(() => run("space.select", { id: s.id }))
+        .on_mouse_down("right", onRight(() => menu("space", { id: s.id })))
+        .child(div().text_size(12).child(`${two(s.index)}${s.machine ? "-" + up(s.machine) : ""}`))
+        .child(div().text_size(15).truncate().child(up(s.name)));
+    };
+    const member = (a) => h_flex().id(`agent-${a.address}`).w_full().h(40).flex_none().gap(6).items_center()
+      .cursor_pointer().hover((st) => st.opacity(0.85))
+      .on_click(() => run("agent.focus", { terminal: a.address }))
+      .on_mouse_down("right", onRight(() => menu("pane", { pane: a.pane, terminal: a.address })))
+      .child(div().w(14).h_full().bg(STATUS[a.status] ?? C.gray).rounded_l(15)
+        .when(a.status === "blocked", (el) => el.loop("opacity", { from: 0.4, to: 1, period: 700 })))
+      .child(v_flex().flex_1().min_w(0)
+        .child(div().text_size(13).font_weight(700).text_color(a.focused ? C.orange : C.tan).truncate()
+          .child(up(`${a.program?.name ?? a.app ?? "agent"} · ${a.tab_name}`)))
+        .child(div().text_size(11).text_color(STATUS[a.status] ?? C.gray).truncate()
+          .child(`${WORD[a.status] ?? up(a.status)} · ${up(a.space_name)}`)));
+    return v_flex().id("side").size_full().bg(C.black).gap(GAP).on_mouse_down("right", onRight(globalMenu))
+      .child(div().w_full().h(18).flex_none().bg(C.orange)) // carries the top elbow down
+      .child(slab("spaces-label", C.peach, `spaces ${two(list.length)}`, 26))
+      .children(list.map(space))
+      .child(slab("space-new", C.gray, "+ new space", 30, (el) => el.cursor_pointer()
+        .hover((st) => st.bg(C.violet)).on_click(() => newSpace()).on_mouse_down("right", onRight(newSpace))))
+      .child(slab("crew-label", C.lilac, `crew ${two(crew.length)}`, 26))
+      .child(v_flex().id("crew").w_full().flex_none().gap(2).pr(4).children(crew.map(member)))
+      .children(this.shepherdr())
+      .child(div().w_full().flex_1().min_h(10).bg(C.gray)); // runs into the bottom elbow
+  }
+
+  // Shepherdr's blocks for the sidebar: a label slab, three counts, and the first few things waiting on the human.
+  // Clicking any of it opens Shepherdr's web app. Not running: one quiet grey slab; not asked yet: nothing.
+  shepherdr() {
+    const s = this.shep;
+    if (s === undefined) return [];
+    if (s === null) return [slab("shepherdr-label", C.gray, "shepherdr offline", 26)];
+    const open = () => openUrl(s.url);
+    const press = (el) => el.cursor_pointer().hover((st) => st.opacity(0.85)).on_click(open);
+    const count = (id, n, word, color) => v_flex().id(id).flex_1().h(46).bg(n ? color : C.gray).justify_end()
+      .px(8).pb(2).text_color(C.black).font_weight(700)
+      .when(id === "shepherdr-need" && n > 0, (el) => el.loop("opacity", { from: 0.55, to: 1, period: 900 }))
+      .child(div().text_size(20).child(two(n)))
+      .child(div().text_size(10).child(word));
+    const row = (r) => h_flex().id(`shepherdr-${r.key}`).w_full().h(36).flex_none().gap(6).items_center()
+      .cursor_pointer().hover((st) => st.opacity(0.85)).on_click(open)
+      .child(div().w(14).h_full().bg(r.color).rounded_l(15)
+        .when(r.color === C.red, (el) => el.loop("opacity", { from: 0.4, to: 1, period: 700 })))
+      .child(v_flex().flex_1().min_w(0)
+        .child(div().text_size(12).font_weight(700).text_color(C.tan).truncate().child(up(r.label)))
+        .child(div().text_size(10).text_color(r.color).truncate().child(up(r.word))));
+    const more = s.rows.length - SHEP_ROWS;
+    return [
+      slab("shepherdr-label", s.need ? C.red : C.gold, "shepherdr", 26, (el) => press(el)
+        .when(s.need > 0, (el) => el.loop("opacity", { from: 0.55, to: 1, period: 900 }))),
+      h_flex().id("shepherdr-counts").w_full().flex_none().gap(GAP)
+        .child(count("shepherdr-need", s.need, "NEED YOU", C.red))
+        .child(count("shepherdr-ready", s.ready, "READY", C.gold))
+        .child(count("shepherdr-working", s.working, "WORKING", C.blue)),
+      v_flex().id("shepherdr-rows").w_full().flex_none().gap(2).pr(4).children(s.rows.slice(0, SHEP_ROWS).map(row))
+        .when(more > 0, (el) => el.child(div().id("shepherdr-more").pl(20).text_size(10).font_weight(700)
+          .text_color(C.gray).cursor_pointer().on_click(open).child(`+ ${two(more)} MORE`))),
+    ];
+  }
+
+  tabs() {
+    const space = spaces().find((s) => s.active);
+    const pill = (t) => {
+      const color = t.active ? C.orange : STATUS[t.status] ?? C.tan;
+      return h_flex().id(`tab-${t.id}`).h_full().flex_none().px(16).rounded(15).bg(color).items_center()
+        .text_color(C.black).text_size(14).font_weight(700).cursor_pointer()
+        .hover((st) => st.opacity(0.85))
+        .when(t.status === "blocked" && !t.active, (el) => el.loop("opacity", { from: 0.5, to: 1, period: 800 }))
+        .on_click(() => run("tab.select", { id: t.id }))
+        .on_mouse_down("right", onRight(() => menu("tab", { id: t.id, space: space.id })))
+        .child(`${two(t.index)} ${up(t.name)}`);
+    };
+    return h_flex().id("tab-bar").size_full().gap(GAP + 2).items_center().overflow_x_scrollbar()
+      .on_mouse_down("right", onRight(globalMenu))
+      .children((space?.tabs ?? []).filter((t) => !t.settled).map(pill))
+      .child(h_flex().id("tab-new").h_full().flex_none().px(14).rounded(15).bg(C.gray).items_center()
+        .text_color(C.black).text_size(22).font_weight(700).cursor_pointer().hover((st) => st.bg(C.violet))
+        .on_click(() => newMenu()).on_mouse_down("right", onRight(newMenu)).child("+"));
+  }
+
+  bottom() {
+    const crew = agents();
+    const count = (s) => crew.filter((a) => a.status === s).length;
+    const away = machines().filter((m) => m.name).length;
+    const clock = new Date(this.now).toTimeString().slice(0, 5);
+    const elbow = div().id("menu").w(SIDE).h_full().flex_none().bg(C.gray).rounded_bl(40)
+      .flex().items_start().justify_end().px(10).pt(4).text_color(C.black).text_size(13).font_weight(700)
+      .cursor_pointer().hover((st) => st.bg(C.violet)).on_click(() => menu("global", {}))
+      .child(h_flex().gap(10).items_center()
+        // the gear opens Herdr's settings; stopping its press keeps the elbow's MENU from opening too
+        .child(div().id("settings").cursor_pointer().hover((st) => st.opacity(0.6))
+          .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+          .on_mouse_down("right", (_e, cx) => cx.stop_propagation())
+          .on_click(() => run("app.settings"))
+          .child(svg("mods/lcars/gear.svg").size(16).text_color(C.black)))
+        .child("MENU"));
+    const status = div().w_full().flex_1().bg(C.gray).child(
+      h_flex().size_full().bg(C.black).rounded_bl(22).items_center().gap(18).pl(18).text_size(12).font_weight(700)
+        .child(div().text_color(C.blue).child(`${two(count("working"))} WORKING`))
+        .child(div().text_color(count("blocked") ? C.red : C.gray).child(`${two(count("blocked"))} NEED YOU`))
+        .child(div().text_color(C.gold).child(`${two(count("done"))} DONE`))
+        .child(div().text_color(C.lilac).child(`${two(away + 1)} MACHINES`))
+        // Shepherdr: what waits on the human (needs an answer, or is ready to merge); click opens it. Quiet when it is not running
+        .when(!!this.shep, (el) => el.child(div().id("shepherdr-status").cursor_pointer().on_click(() => openUrl(this.shep.url))
+          .text_color(this.shep.need ? C.red : this.shep.ready ? C.gold : C.gray)
+          .child(`${two(this.shep.need + this.shep.ready)} SHEPHERDR`)))
+        .child(div().flex_1())
+        .child(div().id("palette").text_color(C.tan).cursor_pointer().on_click(() => run("app.palette"))
+          .child(`${window()?.platform === "macos" ? "⌘" : "CTRL"} SHIFT P · ${clock}`)));
+    const arm = h_flex().w_full().h(16).flex_none().gap(GAP)
+      .child(div().w(120).h_full().bg(C.gray))
+      .child(div().flex_1().h_full().bg(C.sky))
+      .child(div().w(90).h_full().bg(C.peach))
+      .child(div().w(46).h_full().bg(C.orange).rounded_tr(8).rounded_br(8));
+    return h_flex().id("bottom").size_full().bg(C.black).on_mouse_down("right", onRight(globalMenu))
+      .child(elbow)
+      .child(v_flex().flex_1().h_full().child(status).child(arm));
+  }
+}
