@@ -44,7 +44,7 @@ export default class WorkspaceChrome extends View {
     }
     return h_flex().size_full().bg(t.chrome).pl(collapsed ? 6 : 14).pr(10).gap(4).items_center().text_size(13.5)
       .when(window()?.platform === "macos" && !window()?.fullscreen && !collapsed, el => el.pl(76))
-      .when(!collapsed, el => el.child(h_flex().flex_1().gap(8).items_center().child(div().text_size(20).font_semibold().text_color(t.foreground).loop("opacity", { from: 0.25, to: 1, period: 4000 }).child("Ω")).child(div().font_family("Monaspace Krypton NF").font_semibold().text_color(t.foreground).child("OMEGA"))))
+      .when(!collapsed, el => el.child(h_flex().flex_1().gap(8).items_center().child(div().text_size(20).font_semibold().text_color(t.foreground).loop("opacity", { from: 0.25, to: 1, period: 4000 }).child("★")).child(div().font_family("Monaspace Krypton NF").font_semibold().text_color(t.foreground).child("StarkeOS"))))
       .when(!collapsed, el => el.child(this.button("search", svg("mods/omega-chrome/search.svg").size(15), () => run("mod.open", { name: "picker" }))))
       // On the macOS rail the traffic lights fill the row; the agents list's » unfolds it.
       .when(!(collapsed && window()?.platform === "macos"), el => el.child(this.button("sidebar-toggle", svg("mods/omega-chrome/sidebar.svg").size(15), toggleSidebar)));
